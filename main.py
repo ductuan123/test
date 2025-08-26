@@ -41,37 +41,23 @@ def call_api(endpoint, token):
         return {"error": True, "message": str(e)}
 
 
-def get_balance():
+def get_service():
     token = os.getenv("MOTP_TOKEN")
     if not token:
         return {"error": True, "message": "Thiếu MOTP_TOKEN"}
-    return call_api("GetBalance", token)
-
-
-def get_network():
-    token = os.getenv("MOTP_TOKEN")
-    if not token:
-        return {"error": True, "message": "Thiếu MOTP_TOKEN"}
-    return call_api("GetNetwork", token)
+    return call_api("GetService", token)
 
 
 if __name__ == "__main__":
-    # Test GetBalance
-    balance_result = get_balance()
-    print("📌 Balance result:", balance_result)
+    service_result = get_service()
+    print("📌 Service result:", service_result)
 
-    if not balance_result.get("error"):
-        balance = balance_result.get("Data", {}).get("Balance")
-        if balance:
-            print(f"💰 Số dư: {int(balance):,} VNĐ")
-
-    # Test GetNetwork
-    network_result = get_network()
-    print("📌 Network result:", network_result)
-
-    if not network_result.get("error"):
-        data = network_result.get("Data")
+    if not service_result.get("error"):
+        data = service_result.get("Data")
         if isinstance(data, list):
-            print("🌐 Danh sách nhà mạng khả dụng:")
-            for net in data:
-                print(f"- {net}")
+            print("🛠️ Danh sách dịch vụ khả dụng:")
+            for idx, svc in enumerate(data, start=1):
+                code = svc.get("ServiceCode", "N/A")
+                name = svc.get("ServiceName", "N/A")
+                status = svc.get("Status", "N/A")
+                print(f"{idx}. [{code}] {name} - Trạng thái: {status}")
