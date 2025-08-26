@@ -11,7 +11,6 @@ API_BASE = "https://gw.motp.vn/MOTP"
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 AUTHORIZED_ID = 7605356455  # chỉ user này xem balance
 
-# Danh sách dịch vụ STT → (ServiceID, Tên, Giá)
 SERVICES_LIST = {
     1: ("000262", "FB88", 1000),
     2: ("000223", "Sms-f8bet", 2000),
@@ -92,18 +91,27 @@ def get_history(service_id, transaction_code):
     return call_api("History", params)
 
 
-def reply_sms(phone_number, message_text):
-    token = os.getenv("MOTP_TOKEN")
-    params = {"token": token, "phoneNumber": phone_number, "message": message_text}
-    return call_api("ReplySMS", params, method="POST")
-
-
 def send_to_telegram(msg, chat_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     try:
         requests.post(url, data={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"})
     except Exception as e:
         print("❌ Lỗi gửi Telegram:", e)
+
+
+def check_history_loop_with_otp(service_id, transaction_code, chat_id):
+    """Kiểm tra lịch sử SMS, gửi OTP mới về Telegram (gọn)"""
+    sent_codes = set()
+    while True:
+        history = get_history(service_id, transaction_code)
+        if not history.get("error") and isinstance(history.get("Data"), dict):
+            data = history["Data"]
+            phone = data.get("RentalPhoneNumber", "Không rõ")
+            otp = data.get("Code") or data.get("TransDetail")
+            if otp and otp not in sent_codes:
+                sent_codes.add(otp)
+                send_to_telegram(f"📱 Số: {phone}\n✉️ {otp}", chat_id)
+        time.sleep(30)
 
 
 def handle_rent_service(chat_id, stt):
@@ -127,28 +135,13 @@ def handle_rent_service(chat_id, stt):
             f"• TransactionCode: `{transaction}`",
             chat_id
         )
-        check_history_loop_with_reply(service_id, transaction, reply_text="Cảm ơn!", chat_id=chat_id)
+        # Chạy check OTP trong thread riêng
+        threading.Thread(
+            target=check_history_loop_with_otp,
+            args=(service_id, transaction, chat_id)
+        ).start()
     else:
         send_to_telegram(f"❌ Thuê số thất bại: {rent}", chat_id)
-
-
-def check_history_loop_with_reply(service_id, transaction_code, reply_text="Cảm ơn!", chat_id=None):
-    sent_codes = set()
-    while True:
-        history = get_history(service_id, transaction_code)
-        if not history.get("error") and isinstance(history.get("Data"), dict):
-            data = history["Data"]
-            phone = data.get("RentalPhoneNumber", "Không rõ")
-            code = data.get("Code") or data.get("TransDetail")
-            if code and code not in sent_codes:
-                sent_codes.add(code)
-                send_to_telegram(f"📖 Tin nhắn mới:\n• Số: {phone}\n• ✉️ {code}", chat_id)
-                reply_result = reply_sms(phone, reply_text)
-                if not reply_result.get("error"):
-                    send_to_telegram(f"✅ Đã trả lời tin nhắn tự động: {reply_text}", chat_id)
-                else:
-                    send_to_telegram(f"❌ Lỗi khi trả lời: {reply_result.get('message')}", chat_id)
-        time.sleep(30)
 
 
 def handle_command(chat_id, text):
@@ -188,10 +181,11 @@ def handle_command(chat_id, text):
             "• `/balance` - Xem số dư (chỉ user 7605356455)\n"
             "• `/list` - Hiển thị danh sách dịch vụ\n"
             "• `/rent <STT>` - Thuê số điện thoại theo STT\n"
-            "• Bot check SMS và trả lời tự động\n"
+            "• Bot check OTP và gửi về Telegram\n"
             "• `/help` - Hướng dẫn sử dụng"
         )
         send_to_telegram(help_msg, chat_id)
+
     else:
         send_to_telegram("⚡ Lệnh không hợp lệ. Dùng `/help` để xem hướng dẫn.", chat_id)
 
@@ -206,7 +200,7 @@ def listen_commands():
                 last_update_id = update["update_id"]
                 if "message" in update:
                     chat_id = update["message"]["chat"]["id"]
-                    text = update["message"].get("text", "").strip().lower()
+                    text = update["message"].get("text", "").strip()
                     handle_command(chat_id, text)
         except Exception as e:
             print("❌ Lỗi khi lắng nghe:", e)
@@ -215,6 +209,4 @@ def listen_commands():
 
 if __name__ == "__main__":
     print("🤖 Bot MOTP đã khởi động!")
-    # Nếu muốn gửi tin nhắn khởi động, cần biết chat_id cụ thể:
-    # send_to_telegram("🤖 Bot MOTP đã khởi động! Dùng `/help` để xem lệnh.", 7605356455)
     listen_commands()
