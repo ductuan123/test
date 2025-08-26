@@ -74,15 +74,20 @@ if __name__ == "__main__":
     rent_result = rent_phone_number(service_id=1, type_id=3)
 
     if not rent_result.get("error"):
-        data = rent_result.get("Data", {})
-        phone = data.get("PhoneNumber", "Không rõ")
-        price = data.get("Price", "Không rõ")
-        expired = data.get("ExpiredTime", "Không rõ")
+        data = rent_result.get("Data")
 
-        msg = f"📱 Thuê số điện thoại thành công:\n"
-        msg += f"• Số: {phone}\n"
-        msg += f"• Giá: {price} VND\n"
-        msg += f"• Hết hạn: {expired}"
-        send_to_telegram(msg)
+        if isinstance(data, dict):
+            phone = data.get("PhoneNumber", "Không rõ")
+            price = data.get("Price", "Không rõ")
+            expired = data.get("ExpiredTime", "Không rõ")
+
+            msg = f"📱 Thuê số điện thoại thành công:\n"
+            msg += f"• Số: {phone}\n"
+            msg += f"• Giá: {price} VND\n"
+            msg += f"• Hết hạn: {expired}"
+            send_to_telegram(msg)
+        else:
+            # Nếu Data không hợp lệ hoặc None
+            send_to_telegram(f"⚠️ API không trả dữ liệu thuê số.\nPhản hồi: {rent_result}")
     else:
         send_to_telegram(f"❌ Lỗi khi thuê số: {rent_result['message']}")
