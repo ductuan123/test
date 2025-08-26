@@ -50,6 +50,20 @@ def rent_phone_number(service_id=1, type_id=1, phone_number=""):
     return call_api("RentPhoneNumber", params)
 
 
+def get_history(service_id=1, transaction_code=""):
+    """Lấy lịch sử giao dịch"""
+    token = os.getenv("MOTP_TOKEN")
+    if not token:
+        return {"error": True, "message": "Thiếu MOTP_TOKEN"}
+
+    params = {
+        "token": token,
+        "serviceID": service_id,
+        "transactionCode": transaction_code
+    }
+    return call_api("History", params)
+
+
 def send_to_telegram(msg: str):
     """Gửi tin nhắn đến Telegram"""
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -77,8 +91,6 @@ if __name__ == "__main__":
     rent_result = rent_phone_number(service_id=1, type_id=1)
 
     if not rent_result.get("error"):
-        print("🔎 RentPhoneNumber raw:", rent_result)  # Debug in ra Termux
-
         data = rent_result.get("Data")
         if isinstance(data, dict):
             rental_phone = data.get("RentalPhoneNumber", "Không rõ")
@@ -88,11 +100,30 @@ if __name__ == "__main__":
             message += "📱 *Thuê số thành công:*\n"
             message += f"• RentalPhoneNumber: {rental_phone}\n"
             message += f"• Giá: {price} VND\n"
-            message += f"• Hết hạn: {expired}\n"
+            message += f"• Hết hạn: {expired}\n\n"
         else:
-            message += f"⚠️ API không trả dữ liệu thuê số.\nPhản hồi: {rent_result}\n"
+            message += f"⚠️ API không trả dữ liệu thuê số.\nPhản hồi: {rent_result}\n\n"
     else:
-        message += f"❌ Lỗi khi thuê số: {rent_result['message']}\n"
+        message += f"❌ Lỗi khi thuê số: {rent_result['message']}\n\n"
+
+    # --- Lịch sử giao dịch ---
+    history_result = get_history(service_id=1, transaction_code="25170100000781")
+
+    if not history_result.get("error"):
+        data = history_result.get("Data")
+        if isinstance(data, dict):
+            code = data.get("TransactionCode", "Không rõ")
+            status = data.get("Status", "Không rõ")
+            content = data.get("Content", "Không rõ")
+
+            message += "📖 *Lịch sử giao dịch:*\n"
+            message += f"• Mã giao dịch: {code}\n"
+            message += f"• Trạng thái: {status}\n"
+            message += f"• Nội dung: {content}\n"
+        else:
+            message += f"⚠️ API không trả dữ liệu lịch sử.\nPhản hồi: {history_result}\n"
+    else:
+        message += f"❌ Lỗi khi lấy lịch sử: {history_result['message']}\n"
 
     # --- Gửi gộp ---
     send_to_telegram(message)
