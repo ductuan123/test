@@ -16,8 +16,6 @@ def call_api(endpoint, params):
         res = requests.get(f"{API_BASE}/{endpoint}", params=params, timeout=10)
         res.raise_for_status()
         data = res.json()
-
-        # Nếu Data là chuỗi JSON → parse tiếp
         if "Data" in data and isinstance(data["Data"], str):
             try:
                 data["Data"] = json.loads(data["Data"])
@@ -39,7 +37,6 @@ def rent_phone_number(service_id=1, type_id=1, phone_number=""):
     token = os.getenv("MOTP_TOKEN")
     if not token:
         return {"error": True, "message": "Thiếu MOTP_TOKEN"}
-
     params = {"token": token, "serviceID": service_id, "type": type_id, "phoneNumber": phone_number}
     return call_api("RentPhoneNumber", params)
 
@@ -48,7 +45,6 @@ def get_history(service_id=1, transaction_code=""):
     token = os.getenv("MOTP_TOKEN")
     if not token:
         return {"error": True, "message": "Thiếu MOTP_TOKEN"}
-
     params = {"token": token, "serviceID": service_id, "transactionCode": transaction_code}
     return call_api("History", params)
 
@@ -58,7 +54,6 @@ def send_to_telegram(msg: str):
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not bot_token or not chat_id:
         return
-
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     requests.post(url, data={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"})
 
@@ -97,28 +92,29 @@ if __name__ == "__main__":
     else:
         message += f"❌ Lỗi khi thuê số: {rent_result['message']}\n\n"
 
-    # Gửi thông tin thuê số ngay lập tức
+    # Gửi thông tin thuê số
     send_to_telegram(message)
 
     # --- Vòng lặp kiểm tra lịch sử giao dịch ---
     if transaction_code:
-        for i in range(12):  # kiểm tra tối đa 12 lần (tức ~1 phút)
+        for i in range(4):  # lặp 4 lần = 2 phút (30s/lần)
             history_result = get_history(service_id=1, transaction_code=transaction_code)
 
             if not history_result.get("error"):
                 data = history_result.get("Data")
                 if isinstance(data, dict):
-                    content = data.get("Content", "")
+                    code = data.get("TransactionCode", "Không rõ")
                     status = data.get("Status", "Không rõ")
+                    content = data.get("Content", "Chưa có nội dung")
 
-                    if content:  # nếu đã có nội dung (OTP, SMS...)
-                        msg = "📖 *Kết quả lịch sử giao dịch:*\n"
-                        msg += f"• TransactionCode: `{transaction_code}`\n"
-                        msg += f"• Trạng thái: {status}\n"
-                        msg += f"• Nội dung: {content}\n"
-                        send_to_telegram(msg)
-                        break
+                    msg = "📖 *Lịch sử giao dịch:*\n"
+                    msg += f"• TransactionCode: `{code}`\n"
+                    msg += f"• Trạng thái: {status}\n"
+                    msg += f"• Nội dung: {content}\n"
+                    send_to_telegram(msg)
+                else:
+                    send_to_telegram(f"⚠️ API không trả dữ liệu lịch sử.\nPhản hồi: {history_result}")
             else:
                 send_to_telegram(f"❌ Lỗi khi lấy lịch sử: {history_result['message']}")
 
-            time.sleep(5)  # chờ 5s trước khi thử lại
+            time.sleep(30)  # chờ 30s trước khi lặp lại
