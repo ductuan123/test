@@ -103,18 +103,19 @@ if __name__ == "__main__":
             if not history_result.get("error"):
                 data = history_result.get("Data")
                 if isinstance(data, dict):
-                    code = data.get("TransactionCode", "Không rõ")
-                    status = data.get("Status", "Không rõ")
-                    content = data.get("Content", "Chưa có nội dung")
+                    phone = data.get("RentalPhoneNumber", "Không rõ")
+                    code = data.get("Code") or data.get("TransDetail")
 
-                    msg = "📖 *Lịch sử giao dịch:*\n"
-                    msg += f"• TransactionCode: `{code}`\n"
-                    msg += f"• Trạng thái: {status}\n"
-                    msg += f"• Nội dung: {content}\n"
-                    send_to_telegram(msg)
+                    if code:  # chỉ gửi khi có tin nhắn thật sự
+                        msg = "📖 *Tin nhắn mới:*\n"
+                        msg += f"• 📱 Số: {phone}\n"
+                        msg += f"• ✉️ Tin nhắn: {code}\n"
+                        send_to_telegram(msg)
+                    else:
+                        print("⏳ Chưa có tin nhắn, đợi lần tiếp theo...")
                 else:
-                    send_to_telegram(f"⚠️ API không trả dữ liệu lịch sử.\nPhản hồi: {history_result}")
+                    print("⚠️ API không trả dữ liệu hợp lệ:", history_result)
             else:
-                send_to_telegram(f"❌ Lỗi khi lấy lịch sử: {history_result['message']}")
+                print("❌ Lỗi khi lấy lịch sử:", history_result['message'])
 
             time.sleep(30)  # chờ 30s trước khi lặp lại
