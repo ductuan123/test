@@ -100,22 +100,38 @@ def send_to_telegram(msg, chat_id):
 
 
 def check_history_loop_with_otp(service_id, transaction_code, chat_id):
-    """Kiểm tra lịch sử SMS, gửi OTP mới về Telegram (gọn)"""
+    """
+    Kiểm tra lịch sử SMS, gửi OTP mới về Telegram (phiên bản nâng cấp)
+    """
     sent_codes = set()
     while True:
         history = get_history(service_id, transaction_code)
         if not history.get("error") and isinstance(history.get("Data"), dict):
             data = history["Data"]
             phone = data.get("RentalPhoneNumber", "Không rõ")
-            otp = data.get("Code") or data.get("TransDetail")
-            if otp and otp not in sent_codes:
-                sent_codes.add(otp)
-                send_to_telegram(f"📱 Số: {phone}\n✉️ {otp}", chat_id)
-        time.sleep(30)
+            
+            # Lấy tất cả các key có thể chứa OTP
+            otp_candidates = [
+                data.get("Code"),
+                data.get("TransDetail"),
+                data.get("Message"),
+                data.get("Content")
+            ]
+            otp_list = [str(otp).strip() for otp in otp_candidates if otp]
+            
+            for otp in otp_list:
+                if otp not in sent_codes:
+                    sent_codes.add(otp)
+                    msg = f"📱 Số: {phone}\n✉️ OTP: {otp}"
+                    print("DEBUG gửi OTP:", msg)  # log để kiểm tra
+                    send_to_telegram(msg, chat_id)
+        else:
+            print("DEBUG: API History lỗi hoặc Data không hợp lệ", history)
+        
+        time.sleep(5)  # kiểm tra 5 giây 1 lần
 
 
 def handle_rent_service(chat_id, stt):
-    """Thuê số trong thread riêng"""
     if stt not in SERVICES_LIST:
         send_to_telegram("⚠️ STT không hợp lệ", chat_id)
         return
