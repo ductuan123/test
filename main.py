@@ -3,7 +3,7 @@ import os
 import json
 from dotenv import load_dotenv
 
-# Load biến môi trường
+# Load biến môi trường từ file config.env
 load_dotenv("config.env")
 
 API_BASE = "https://gw.motp.vn/MOTP"
@@ -35,7 +35,7 @@ def get_balance():
     return call_api("GetBalance", {"token": token})
 
 
-def rent_phone_number(service_id=1, type_id=3, phone_number=""):
+def rent_phone_number(service_id=1, type_id=1, phone_number=""):
     """Thuê số điện thoại"""
     token = os.getenv("MOTP_TOKEN")
     if not token:
@@ -62,16 +62,18 @@ def send_to_telegram(msg: str):
 
 
 if __name__ == "__main__":
+    message = ""
+
     # --- Lấy số dư ---
     balance_result = get_balance()
     if not balance_result.get("error"):
         balance = balance_result.get("Data", {}).get("Balance", "Không rõ")
-        send_to_telegram(f"💰 Số dư tài khoản: *{balance} VND*")
+        message += f"💰 Số dư tài khoản: *{balance} VND*\n\n"
     else:
-        send_to_telegram(f"❌ Lỗi khi lấy số dư: {balance_result['message']}")
+        message += f"❌ Lỗi khi lấy số dư: {balance_result['message']}\n\n"
 
     # --- Thuê số ---
-    rent_result = rent_phone_number(service_id=1, type_id=3)
+    rent_result = rent_phone_number(service_id=1, type_id=1)
 
     if not rent_result.get("error"):
         data = rent_result.get("Data")
@@ -81,13 +83,14 @@ if __name__ == "__main__":
             price = data.get("Price", "Không rõ")
             expired = data.get("ExpiredTime", "Không rõ")
 
-            msg = f"📱 Thuê số điện thoại thành công:\n"
-            msg += f"• Số: {phone}\n"
-            msg += f"• Giá: {price} VND\n"
-            msg += f"• Hết hạn: {expired}"
-            send_to_telegram(msg)
+            message += "📱 *Thuê số thành công:*\n"
+            message += f"• Số: {phone}\n"
+            message += f"• Giá: {price} VND\n"
+            message += f"• Hết hạn: {expired}\n"
         else:
-            # Nếu Data không hợp lệ hoặc None
-            send_to_telegram(f"⚠️ API không trả dữ liệu thuê số.\nPhản hồi: {rent_result}")
+            message += f"⚠️ API không trả dữ liệu thuê số.\nPhản hồi: {rent_result}\n"
     else:
-        send_to_telegram(f"❌ Lỗi khi thuê số: {rent_result['message']}")
+        message += f"❌ Lỗi khi thuê số: {rent_result['message']}\n"
+
+    # --- Gửi gộp ---
+    send_to_telegram(message)
