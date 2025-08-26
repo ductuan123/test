@@ -1,6 +1,7 @@
 import requests
 import os
 import json
+import time
 from dotenv import load_dotenv
 
 # Load biến môi trường từ file config.env
@@ -28,7 +29,6 @@ def call_api(endpoint, params):
 
 
 def get_balance():
-    """Lấy số dư tài khoản"""
     token = os.getenv("MOTP_TOKEN")
     if not token:
         return {"error": True, "message": "Thiếu MOTP_TOKEN"}
@@ -36,36 +36,24 @@ def get_balance():
 
 
 def rent_phone_number(service_id=1, type_id=1, phone_number=""):
-    """Thuê số điện thoại"""
     token = os.getenv("MOTP_TOKEN")
     if not token:
         return {"error": True, "message": "Thiếu MOTP_TOKEN"}
 
-    params = {
-        "token": token,
-        "serviceID": service_id,
-        "type": type_id,
-        "phoneNumber": phone_number
-    }
+    params = {"token": token, "serviceID": service_id, "type": type_id, "phoneNumber": phone_number}
     return call_api("RentPhoneNumber", params)
 
 
 def get_history(service_id=1, transaction_code=""):
-    """Lấy lịch sử giao dịch"""
     token = os.getenv("MOTP_TOKEN")
     if not token:
         return {"error": True, "message": "Thiếu MOTP_TOKEN"}
 
-    params = {
-        "token": token,
-        "serviceID": service_id,
-        "transactionCode": transaction_code
-    }
+    params = {"token": token, "serviceID": service_id, "transactionCode": transaction_code}
     return call_api("History", params)
 
 
 def send_to_telegram(msg: str):
-    """Gửi tin nhắn đến Telegram"""
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not bot_token or not chat_id:
@@ -88,6 +76,7 @@ if __name__ == "__main__":
         message += f"❌ Lỗi khi lấy số dư: {balance_result['message']}\n\n"
 
     # --- Thuê số ---
+    transaction_code = None
     rent_result = rent_phone_number(service_id=1, type_id=1)
 
     if not rent_result.get("error"):
@@ -96,34 +85,40 @@ if __name__ == "__main__":
             rental_phone = data.get("RentalPhoneNumber", "Không rõ")
             price = data.get("Price", "Không rõ")
             expired = data.get("ExpiredTime", "Không rõ")
+            transaction_code = data.get("TransactionCode")
 
             message += "📱 *Thuê số thành công:*\n"
             message += f"• RentalPhoneNumber: {rental_phone}\n"
             message += f"• Giá: {price} VND\n"
-            message += f"• Hết hạn: {expired}\n\n"
+            message += f"• Hết hạn: {expired}\n"
+            message += f"• TransactionCode: `{transaction_code}`\n\n"
         else:
             message += f"⚠️ API không trả dữ liệu thuê số.\nPhản hồi: {rent_result}\n\n"
     else:
         message += f"❌ Lỗi khi thuê số: {rent_result['message']}\n\n"
 
-    # --- Lịch sử giao dịch ---
-    history_result = get_history(service_id=1, transaction_code="25170100000781")
-
-    if not history_result.get("error"):
-        data = history_result.get("Data")
-        if isinstance(data, dict):
-            code = data.get("TransactionCode", "Không rõ")
-            status = data.get("Status", "Không rõ")
-            content = data.get("Content", "Không rõ")
-
-            message += "📖 *Lịch sử giao dịch:*\n"
-            message += f"• Mã giao dịch: {code}\n"
-            message += f"• Trạng thái: {status}\n"
-            message += f"• Nội dung: {content}\n"
-        else:
-            message += f"⚠️ API không trả dữ liệu lịch sử.\nPhản hồi: {history_result}\n"
-    else:
-        message += f"❌ Lỗi khi lấy lịch sử: {history_result['message']}\n"
-
-    # --- Gửi gộp ---
+    # Gửi thông tin thuê số ngay lập tức
     send_to_telegram(message)
+
+    # --- Vòng lặp kiểm tra lịch sử giao dịch ---
+    if transaction_code:
+        for i in range(12):  # kiểm tra tối đa 12 lần (tức ~1 phút)
+            history_result = get_history(service_id=1, transaction_code=transaction_code)
+
+            if not history_result.get("error"):
+                data = history_result.get("Data")
+                if isinstance(data, dict):
+                    content = data.get("Content", "")
+                    status = data.get("Status", "Không rõ")
+
+                    if content:  # nếu đã có nội dung (OTP, SMS...)
+                        msg = "📖 *Kết quả lịch sử giao dịch:*\n"
+                        msg += f"• TransactionCode: `{transaction_code}`\n"
+                        msg += f"• Trạng thái: {status}\n"
+                        msg += f"• Nội dung: {content}\n"
+                        send_to_telegram(msg)
+                        break
+            else:
+                send_to_telegram(f"❌ Lỗi khi lấy lịch sử: {history_result['message']}")
+
+            time.sleep(5)  # chờ 5s trước khi thử lại
