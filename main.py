@@ -81,12 +81,12 @@ if __name__ == "__main__":
 
         data = rent_result.get("Data")
         if isinstance(data, dict):
-            phone = data.get("PhoneNumber", "Không rõ")
+            rental_phone = data.get("RentalPhoneNumber", "Không rõ")
             price = data.get("Price", "Không rõ")
             expired = data.get("ExpiredTime", "Không rõ")
 
             message += "📱 *Thuê số thành công:*\n"
-            message += f"• Số: {phone}\n"
+            message += f"• RentalPhoneNumber: {rental_phone}\n"
             message += f"• Giá: {price} VND\n"
             message += f"• Hết hạn: {expired}\n"
         else:
