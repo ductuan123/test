@@ -67,7 +67,8 @@ if __name__ == "__main__":
     # --- Lấy số dư ---
     balance_result = get_balance()
     if not balance_result.get("error"):
-        balance = balance_result.get("Data", {}).get("Balance", "Không rõ")
+        data = balance_result.get("Data", {})
+        balance = data.get("Balance", "Không rõ") if isinstance(data, dict) else "Không rõ"
         message += f"💰 Số dư tài khoản: *{balance} VND*\n\n"
     else:
         message += f"❌ Lỗi khi lấy số dư: {balance_result['message']}\n\n"
@@ -76,8 +77,9 @@ if __name__ == "__main__":
     rent_result = rent_phone_number(service_id=1, type_id=1)
 
     if not rent_result.get("error"):
-        data = rent_result.get("Data")
+        print("🔎 RentPhoneNumber raw:", rent_result)  # Debug in ra Termux
 
+        data = rent_result.get("Data")
         if isinstance(data, dict):
             phone = data.get("PhoneNumber", "Không rõ")
             price = data.get("Price", "Không rõ")
