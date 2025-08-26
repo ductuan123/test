@@ -1,5 +1,10 @@
 import requests
+import os
+from dotenv import load_dotenv
 import logging
+
+# Load biến môi trường từ file config.env
+load_dotenv("config.env")
 
 # Logging cấu hình
 logging.basicConfig(
@@ -8,17 +13,21 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Token cố định
-TOKEN = "2A987C9227E011AD7B64372D32FF931D2F17D6D3"
 
 def get_balance():
     """
-    Gọi API GetBalance từ MOTP với token cố định và trả về JSON.
+    Gọi API GetBalance từ MOTP và trả về kết quả JSON.
     """
-    url = f"https://gw.motp.vn/MOTP/GetBalance?token={TOKEN}"
+    token = os.getenv("MOTP_TOKEN")
+    if not token:
+        logging.error("Không tìm thấy MOTP_TOKEN trong config.env")
+        return {"error": True, "message": "Thiếu token"}
+
+    url = "https://gw.motp.vn/MOTP/GetBalance"
+    params = {"token": token}
 
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -28,12 +37,47 @@ def get_balance():
         return {"error": True, "message": "Không thể phân tích JSON từ server"}
 
 
+def send_to_telegram(message):
+    """
+    Gửi một tin nhắn đến Telegram thông qua Bot API.
+    """
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+    if not bot_token or not chat_id:
+        logging.error("Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID trong config.env")
+        return
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    data = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+
+    try:
+        response = requests.post(url, data=data)
+        response.raise_for_status()
+        logging.info("Đã gửi tin nhắn thành công đến Telegram.")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Lỗi khi gửi tin nhắn Telegram: {e}")
+
+
 if __name__ == "__main__":
     result = get_balance()
-    print("Kết quả API MOTP:", result)
 
     if "error" in result and result["error"]:
-        print("❌ Lỗi khi lấy số dư:", result["message"])
+        msg = f"❌ Lỗi khi lấy số dư MOTP: {result['message']}"
+        print(msg)
+        send_to_telegram(msg)
     else:
-        balance = result.get("Balance", "Không rõ")
-        print(f"💰 Số dư tài khoản MOTP: {balance}")
+        balance = result.get("Balance", None)
+        if balance is not None:
+            # Format số tiền có dấu phân cách
+            formatted_balance = f"{int(balance):,}"
+            msg = f"💰 Số dư tài khoản MOTP: *{formatted_balance} VNĐ*"
+        else:
+            msg = "⚠️ API không trả về số dư."
+
+        print(msg)
+        send_to_telegram(msg)
