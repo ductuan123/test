@@ -11,10 +11,49 @@ API_BASE = "https://gw.motp.vn/MOTP"
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 AUTHORIZED_ID = 7605356455  # chỉ user này xem balance
 
+# Danh sách dịch vụ STT → (ServiceID, Tên, Giá)
 SERVICES_LIST = {
     1: ("000262", "FB88", 1000),
     2: ("000223", "Sms-f8bet", 2000),
-    # ... thêm toàn bộ danh sách
+    3: ("000222", "Sms-hi88", 1000),
+    4: ("000217", "SMS-Shbet", 500),
+    5: ("000216", "68GB", 1000),
+    6: ("000204", "VIC88 - Perfy", 500),
+    7: ("000202", "F168", 500),
+    8: ("000201", "Thiso reward", 500),
+    9: ("000187", "Zalopay", 500),
+    10: ("000186", "Bất cứ dịch vụ nào cũng được", 500),
+    11: ("000185", "Udemi", 500),
+    12: ("000184", "Tony", 500),
+    13: ("000182", "WhatsApp", 500),
+    14: ("000181", "Yahoo", 500),
+    15: ("000180", "AMAZON JP", 500),
+    16: ("000179", "PAYPAY", 500),
+    17: ("000178", "Line", 500),
+    18: ("000177", "TikTok", 500),
+    19: ("000176", "Medicare.vn", 500),
+    20: ("000175", "Bumble", 500),
+    21: ("000174", "Hinge", 500),
+    22: ("000173", "BRAX", 500),
+    23: ("000172", "AIO", 500),
+    24: ("000171", "AIA Vietnam", 500),
+    25: ("000170", "Telegram", 3000),
+    26: ("000169", "WhatsApp", 500),
+    27: ("000168", "Facebook", 3000),
+    28: ("000166", "Viber", 500),
+    29: ("000165", "Twitter", 500),
+    30: ("000163", "Zalo", 500),
+    31: ("000162", "Wechat", 500),
+    32: ("000161", "Okvip", 1000),
+    33: ("000142", "sonnguyen_test", 1000),
+    34: ("000141", "Thiennv_Testdichvu", 1000),
+    35: ("000101", "Luckylotter", 500),
+    36: ("000082", "Tinder", 500),
+    37: ("000081", "bet88", 500),
+    38: ("000061", "Shopee / ShopeePay", 500),
+    39: ("000021", "Tiki", 500),
+    40: ("000002", "Gmail/Google", 500),
+    41: ("000001", "Khác", 500),
 }
 
 
@@ -59,7 +98,7 @@ def reply_sms(phone_number, message_text):
     return call_api("ReplySMS", params, method="POST")
 
 
-def send_to_telegram(msg, chat_id=CHAT_ID):
+def send_to_telegram(msg, chat_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     try:
         requests.post(url, data={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"})
@@ -68,7 +107,7 @@ def send_to_telegram(msg, chat_id=CHAT_ID):
 
 
 def handle_rent_service(chat_id, stt):
-    """Xử lý thuê số trong thread riêng"""
+    """Thuê số trong thread riêng"""
     if stt not in SERVICES_LIST:
         send_to_telegram("⚠️ STT không hợp lệ", chat_id)
         return
@@ -88,13 +127,12 @@ def handle_rent_service(chat_id, stt):
             f"• TransactionCode: `{transaction}`",
             chat_id
         )
-        # Check SMS và trả lời trong thread riêng
         check_history_loop_with_reply(service_id, transaction, reply_text="Cảm ơn!", chat_id=chat_id)
     else:
         send_to_telegram(f"❌ Thuê số thất bại: {rent}", chat_id)
 
 
-def check_history_loop_with_reply(service_id, transaction_code, reply_text="Cảm ơn!", chat_id=CHAT_ID):
+def check_history_loop_with_reply(service_id, transaction_code, reply_text="Cảm ơn!", chat_id=None):
     sent_codes = set()
     while True:
         history = get_history(service_id, transaction_code)
@@ -126,6 +164,12 @@ def handle_command(chat_id, text):
         else:
             send_to_telegram(f"❌ {balance['message']}", chat_id)
 
+    elif text == "/list":
+        msg = "📋 *Danh sách dịch vụ:*\n"
+        for stt, (service_id, name, price) in SERVICES_LIST.items():
+            msg += f"{stt}. {name} - Giá: {price} VND\n"
+        send_to_telegram(msg, chat_id)
+
     elif text.startswith("/rent"):
         parts = text.split()
         if len(parts) < 2:
@@ -136,13 +180,13 @@ def handle_command(chat_id, text):
         except:
             send_to_telegram("⚠️ STT phải là số nguyên", chat_id)
             return
-        # Chạy thuê số trong thread riêng để không block bot
         threading.Thread(target=handle_rent_service, args=(chat_id, stt)).start()
 
     elif text == "/help":
         help_msg = (
             "🤖 Hướng dẫn sử dụng bot:\n"
             "• `/balance` - Xem số dư (chỉ user 7605356455)\n"
+            "• `/list` - Hiển thị danh sách dịch vụ\n"
             "• `/rent <STT>` - Thuê số điện thoại theo STT\n"
             "• Bot check SMS và trả lời tự động\n"
             "• `/help` - Hướng dẫn sử dụng"
@@ -170,5 +214,7 @@ def listen_commands():
 
 
 if __name__ == "__main__":
-    send_to_telegram("🤖 Bot MOTP đã khởi động! Dùng `/help` để xem lệnh.")
+    print("🤖 Bot MOTP đã khởi động!")
+    # Nếu muốn gửi tin nhắn khởi động, cần biết chat_id cụ thể:
+    # send_to_telegram("🤖 Bot MOTP đã khởi động! Dùng `/help` để xem lệnh.", 7605356455)
     listen_commands()
