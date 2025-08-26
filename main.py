@@ -1,5 +1,6 @@
 import requests
 import os
+import json
 from dotenv import load_dotenv
 import logging
 
@@ -33,16 +34,22 @@ def get_balance():
         print("🔎 Response text:", response.text)   # Debug thô
 
         response.raise_for_status()
+        result = response.json()
 
-        # Thử parse JSON
-        try:
-            return response.json()
-        except ValueError:
-            return {"error": True, "message": "Không thể phân tích JSON từ server", "raw": response.text}
+        # Parse tiếp Data nếu nó là string JSON
+        if "Data" in result and isinstance(result["Data"], str):
+            try:
+                result["Data"] = json.loads(result["Data"])
+            except Exception as e:
+                print("⚠️ Không parse được Data:", e)
+
+        return result
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Lỗi khi gọi API MOTP: {e}")
         return {"error": True, "message": str(e)}
+    except ValueError:
+        return {"error": True, "message": "Không thể phân tích JSON từ server"}
 
 
 def send_to_telegram(message):
@@ -73,7 +80,7 @@ def send_to_telegram(message):
 
 if __name__ == "__main__":
     result = get_balance()
-    print("📌 JSON (nếu parse được):", result)
+    print("📌 JSON (sau khi parse):", result)
 
     if "error" in result and result["error"]:
         msg = f"❌ Lỗi khi lấy số dư MOTP: {result['message']}"
