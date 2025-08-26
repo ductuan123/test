@@ -19,9 +19,12 @@ SERVICES = {
 }
 
 
-def call_api(endpoint, params):
+def call_api(endpoint, params, method="GET"):
     try:
-        res = requests.get(f"{API_BASE}/{endpoint}", params=params, timeout=10)
+        if method.upper() == "GET":
+            res = requests.get(f"{API_BASE}/{endpoint}", params=params, timeout=10)
+        else:
+            res = requests.post(f"{API_BASE}/{endpoint}", data=params, timeout=10)
         res.raise_for_status()
         data = res.json()
         if "Data" in data and isinstance(data["Data"], str):
@@ -49,6 +52,12 @@ def get_history(service_id, transaction_code):
     token = os.getenv("MOTP_TOKEN")
     params = {"token": token, "serviceID": service_id, "transactionCode": transaction_code}
     return call_api("History", params)
+
+
+def reply_sms(phone_number, message_text):
+    token = os.getenv("MOTP_TOKEN")
+    params = {"token": token, "phoneNumber": phone_number, "message": message_text}
+    return call_api("ReplySMS", params, method="POST")
 
 
 def send_to_telegram(msg):
@@ -89,7 +98,7 @@ def handle_command(text):
     elif text.startswith("/rent"):
         parts = text.split()
         if len(parts) < 2:
-            send_to_telegram("⚠️ Dùng lệnh: `/rent lazada` hoặc `/rent shopee`")
+            send_to_telegram("⚠️ Dùng lệnh: `/rent <tên dịch vụ>`")
             return
 
         service_name = parts[1]
@@ -114,17 +123,28 @@ def handle_command(text):
                 f"• TransactionCode: `{transaction}`"
             )
 
-            # Bắt đầu check SMS vô hạn
-            check_history_loop_infinite(service_id, transaction)
+            # Bắt đầu check SMS và trả lời tự động
+            check_history_loop_with_reply(service_id, transaction, reply_text="Cảm ơn!")
         else:
             send_to_telegram(f"❌ Thuê số thất bại: {rent}")
 
+    elif text == "/help":
+        help_msg = (
+            "🤖 *Hướng dẫn sử dụng bot MOTP:*\n"
+            "• `/balance` - Xem số dư tài khoản\n"
+            "• `/rent <tên dịch vụ>` - Thuê số điện thoại\n"
+            "   Ví dụ: `/rent lazada` hoặc `/rent shopee`\n"
+            "• Bot sẽ tự động check SMS và trả lời khi có tin nhắn mới"
+        )
+        send_to_telegram(help_msg)
+
     else:
-        send_to_telegram("⚡ Lệnh không hợp lệ. Hỗ trợ: `/balance`, `/rent lazada`")
+        send_to_telegram("⚡ Lệnh không hợp lệ. Dùng `/help` để xem hướng dẫn.")
 
 
-def check_history_loop_infinite(service_id, transaction_code):
-    """Check lịch sử giao dịch liên tục tới khi có SMS"""
+def check_history_loop_with_reply(service_id, transaction_code, reply_text="Cảm ơn!"):
+    """Check lịch sử SMS liên tục và trả lời tự động"""
+    sent_codes = set()  # lưu các tin nhắn đã xử lý
     while True:
         history = get_history(service_id, transaction_code)
         if not history.get("error") and isinstance(history.get("Data"), dict):
@@ -132,19 +152,20 @@ def check_history_loop_infinite(service_id, transaction_code):
             phone = data.get("RentalPhoneNumber", "Không rõ")
             code = data.get("Code") or data.get("TransDetail")
 
-            if code:  # nếu có tin nhắn -> gửi và thoát vòng lặp
-                send_to_telegram(
-                    f"📖 *Tin nhắn mới:*\n• 📱 Số: {phone}\n• ✉️ {code}"
-                )
-                break
-            else:
-                print("⏳ Chưa có tin nhắn, đợi lần tiếp theo...")
-        else:
-            print("❌ Lỗi khi lấy lịch sử:", history.get("message", history))
+            if code and code not in sent_codes:
+                sent_codes.add(code)
+                # Gửi tin nhắn về Telegram
+                send_to_telegram(f"📖 *Tin nhắn mới:*\n• 📱 Số: {phone}\n• ✉️ {code}")
 
-        time.sleep(30)  # check mỗi 30 giây
+                # Tự động trả lời
+                reply_result = reply_sms(phone, reply_text)
+                if not reply_result.get("error"):
+                    send_to_telegram(f"✅ Đã trả lời tin nhắn tự động: {reply_text}")
+                else:
+                    send_to_telegram(f"❌ Lỗi khi trả lời: {reply_result.get('message')}")
+        time.sleep(30)
 
 
 if __name__ == "__main__":
-    send_to_telegram("🤖 Bot MOTP đã khởi động! Dùng lệnh `/balance` hoặc `/rent <dịch vụ>`")
+    send_to_telegram("🤖 Bot MOTP đã khởi động! Dùng `/help` để xem lệnh.")
     listen_commands()
