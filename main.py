@@ -17,6 +17,7 @@ logging.basicConfig(
 def get_balance():
     """
     Gọi API GetBalance từ MOTP và trả về kết quả JSON.
+    Có thêm debug để xem phản hồi server.
     """
     token = os.getenv("MOTP_TOKEN")
     if not token:
@@ -28,13 +29,20 @@ def get_balance():
 
     try:
         response = requests.get(url, params=params, timeout=10)
+        print("🔎 Response status code:", response.status_code)
+        print("🔎 Response text:", response.text)   # Debug thô
+
         response.raise_for_status()
-        return response.json()
+
+        # Thử parse JSON
+        try:
+            return response.json()
+        except ValueError:
+            return {"error": True, "message": "Không thể phân tích JSON từ server", "raw": response.text}
+
     except requests.exceptions.RequestException as e:
         logging.error(f"Lỗi khi gọi API MOTP: {e}")
         return {"error": True, "message": str(e)}
-    except ValueError:
-        return {"error": True, "message": "Không thể phân tích JSON từ server"}
 
 
 def send_to_telegram(message):
@@ -65,19 +73,21 @@ def send_to_telegram(message):
 
 if __name__ == "__main__":
     result = get_balance()
+    print("📌 JSON (nếu parse được):", result)
 
     if "error" in result and result["error"]:
         msg = f"❌ Lỗi khi lấy số dư MOTP: {result['message']}"
-        print(msg)
         send_to_telegram(msg)
     else:
-        balance = result.get("Balance", None)
+        balance = (
+            result.get("Balance")
+            or result.get("balance")
+            or result.get("Data", {}).get("Balance")
+        )
         if balance is not None:
-            # Format số tiền có dấu phân cách
             formatted_balance = f"{int(balance):,}"
             msg = f"💰 Số dư tài khoản MOTP: *{formatted_balance} VNĐ*"
         else:
-            msg = "⚠️ API không trả về số dư."
-
+            msg = f"⚠️ API không có trường Balance.\nRaw: {result}"
         print(msg)
         send_to_telegram(msg)
